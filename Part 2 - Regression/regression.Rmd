@@ -1,0 +1,496 @@
+---
+title: "Part 2 Regression"
+output: html_notebook
+---
+
+```{r}
+# Importing the dataset
+dataset = read.csv('Salary_Data.csv')
+```
+
+```{r}
+# Splitting the dataset into the training set and test set
+library(caTools)
+set.seed(123)
+split = sample.split(dataset$Salary, SplitRatio = 2/3)
+training_set = subset(dataset, split == TRUE)
+test_set = subset(dataset, split == FALSE)
+```
+
+## 2.1 Simple Linear Regression
+### 2.1.1 Simple Linear Regression Intuition
+The formula of simple linear regression is:
+
+$$y=b_0+b_1x_1$$
+
+where $y$ is the dependent variable (DV), $x_1$ is the independent variable (IV), $b_0$ is the constant, and $b_1$ is the coefficient.
+
+### 2.1.2 Simple Linear Regression in R
+In `LinearRegression` class, we don't need feature scaling because this `sklearn` class can automatically do feature scaling.
+
+```{r}
+# Fitting simple linear regression to the training set
+regressor = lm(formula = Salary ~ YearsExperience, 
+               data = training_set)
+summary(regressor)
+```
+
+```{r}
+# Predict the test set results
+y_pred = predict(regressor, newdata = test_set)
+```
+
+```{r}
+# Visualizing the training set results
+library(ggplot2)
+ggplot() + 
+  geom_point(aes(x = training_set$YearsExperience, y = training_set$Salary), 
+             color = 'red') + 
+  geom_line(aes(x = training_set$YearsExperience, y = predict(regressor, newdata = training_set)), 
+            color = 'blue') + 
+  ggtitle('Salary vs Experience (Training Set)') + 
+  xlab('Years of Experience') + 
+  ylab('Salary')
+```
+
+```{r}
+# Visualizing the test set results
+ggplot() + 
+  geom_point(aes(x = test_set$YearsExperience, y = test_set$Salary), 
+             color = 'orange') + 
+  geom_line(aes(x = training_set$YearsExperience, y = predict(regressor, newdata = training_set)), 
+            color = 'blue') + 
+  ggtitle('Salary vs Experience (Test Set)') + 
+  xlab('Years of Experience') + 
+  ylab('Salary')
+```
+
+## 2.2 Multiple Linear Regression
+### 2.2.1 Multiple Linear Regression Intuition
+The formula of multiple linear regression is:
+
+$$y=b_0+b_1x_1+b_2x_2+\cdots+b_n x_n$$
+
+where $y$ is the dependent variable (DV) and $x_1,\dots,x_n$ are the independent variables (IVs).
+
+**Assumptions of a linear regression**:
+- Linearity: Linear regression needs the relationship between the independent and dependent variables to be linear.  It is also important to check for outliers since linear regression is sensitive to outlier effects.
+- Homoscedasity: The last assumption of the linear regression analysis is homoscedasticity.  The scatter plot is good way to check whether the data are homoscedastic (meaning the residuals are equal across the regression line).
+- Multivariate normality: The linear regression analysis requires all variables to be multivariate normal. When the data is not normally distributed a non-linear transformation (e.g., log-transformation) might fix this issue.
+- Independence of errors: Linear regression analysis requires that there is little or no autocorrelation in the data.  Autocorrelation occurs when the residuals are not independent from each other.
+- Lack of multicollinearity: Linear regression assumes that there is little or no multicollinearity in the data.  Multicollinearity occurs when the independent variables are too highly correlated with each other.
+
+**Dummy variables**:
+A dummy variable (aka, an indicator variable) is a numeric variable that represents categorical data, such as gender, race, political affiliation, etc.
+
+**Dummy variable trap**:
+When we create the dummy variable, we need to always remember to take one dummy variable away to avoid the linear dependence within the features.
+
+**Backward Elimination**:
+When building a model, we need to eliminate the features that are not statistically significant. One effective way of doing this is backward elimination.
+- **STEP 1**: Select a significance level to stay in the model (e.g. SL = 0.05)
+- **STEP 2**: Fit the full model with all possible predictors
+- **STEP 3**: Consider the predictor with the highest p-value. If P > SL, go to STEP 4, otherwise go to FIN
+- **STEP 4**: Remove the predictor
+- **STEP 5**: Fit the model without this variable.
+- **FIN**: Your model is ready
+
+### 2.2.2 Multiple Linear Regression in R
+
+```{r}
+# Importing the dataset
+dataset = read.csv('50_Startups.csv')
+```
+
+```{r}
+# Encoding categorical data
+dataset$State = factor(dataset$State, 
+                       levels = c('New York', 'California', 'Florida'), 
+                       labels = c(1, 2, 3))
+```
+
+```{r}
+# Splitting the dataset into the training and test set
+split = sample.split(dataset$Profit, SplitRatio = 0.8)
+training_set = subset(dataset, split == TRUE)
+test_set = subset(dataset, split == FALSE)
+```
+
+```{r}
+# Fit multiple linear regression to the training set
+regressor = lm(formula = Profit ~ ., 
+               data = training_set)
+```
+
+```{r}
+# Predicting the test results
+y_pred = predict(regressor, newdata = test_set)
+```
+
+We use the whole dataset rather than training set to have complete information about which independent variables are statistically significant.
+```{r}
+# Building the optimal model using backward elimination
+regressor = lm(formula = Profit ~ R.D.Spend + Administration + Marketing.Spend + State, 
+               data = dataset)
+summary(regressor)
+```
+```{r}
+regressor = lm(formula = Profit ~ R.D.Spend + Administration + Marketing.Spend, 
+               data = dataset)
+summary(regressor)
+```
+
+```{r}
+
+regressor = lm(formula = Profit ~ R.D.Spend + Marketing.Spend, 
+               data = dataset)
+summary(regressor)
+```
+
+```{r}
+regressor = lm(formula = Profit ~ R.D.Spend, 
+               data = dataset)
+summary(regressor)
+```
+
+```{r}
+# Automatic backward elimination
+backwardElimination <- function(x, sl) {
+  numVars = length(x)
+  for (i in c(1:numVars)){
+    regressor = lm(formula = Profit ~ ., data = x)
+    maxVar = max(coef(summary(regressor))[c(2:numVars), "Pr(>|t|)"])
+    if (maxVar > sl){
+      j = which(coef(summary(regressor))[c(2:numVars), "Pr(>|t|)"] == maxVar)
+      x = x[, -j]
+    }
+    numVars = numVars - 1
+  }
+  return(summary(regressor))
+}
+
+SL = 0.05
+dataset = dataset[, c(1,2,3,4,5)]
+backwardElimination(training_set, SL)
+```
+
+## 2.3 Polynomial Regression
+### 2.3.1 Polynomial Regression Intuition
+The formula of polynomial regression is:
+
+$$y=b_0+b_1x_1+b_2x_1^2+\cdots+b_nx_1^2$$
+
+### 2.3.2 Polynomial Regression in R
+```{r}
+# Importing the dataset
+dataset = read.csv('Position_Salaries.csv')
+dataset = dataset[2:3]
+```
+
+First, we try linear regression model.
+```{r}
+# Fitting linear regression to the dataset
+lin_reg = lm(formula = Salary ~ ., 
+             data = dataset)
+summary(lin_reg)
+```
+
+```{r}
+# Predicting a new result with linear regression
+y_pred = predict(lin_reg, data.frame(Level = 6.5))
+y_pred
+```
+
+```{r}
+# Visualizing the linear regression results
+ggplot() + 
+  geom_point(aes(x = dataset$Level, y = dataset$Salary), 
+             color = 'red') + 
+  geom_line(aes(x = dataset$Level, y = predict(lin_reg, newdata = dataset)), 
+            color = 'blue') + 
+  ggtitle('Truth or Bluff (Linear Regression)') + 
+  xlab('Level') + 
+  ylab('Salary')
+```
+
+It seems that linear regression does not perform well. Alternatively, we try polynomial regression model.
+```{r}
+# Fitting polynomial regression to the dataset
+dataset$Level2 = dataset$Level^2
+dataset$Level3 = dataset$Level^3
+dataset$Level4 = dataset$Level^4
+poly_reg = lm(formula = Salary ~ ., 
+              data = dataset)
+summary(poly_reg)
+```
+
+```{r}
+# Predicting a new result with polynomial regression
+y_pred = predict(poly_reg, data.frame(Level = 6.5, 
+                                      Level2 = 6.5^2, 
+                                      Level3 = 6.5^3, 
+                                      Level4 = 6.5^4))
+y_pred
+```
+
+```{r}
+# Visualizing the polynomial regression results
+ggplot() + 
+  geom_point(aes(x = dataset$Level, y = dataset$Salary), 
+             color = 'red') + 
+  geom_line(aes(x = dataset$Level, y = predict(poly_reg, newdata = dataset)), 
+            color = 'blue') + 
+  ggtitle('Truth or Bluff (Polynomial Regression)') + 
+  xlab('Level') + 
+  ylab('Salary')
+```
+
+It seems performing better than linear regression. In order to make the model curve smoother, we set a new variable `X_grid` to make more intervals between different points.
+
+```{r}
+# Visualizing the polynomial regression results (for higher resolution and smoother curve)
+X_grid = seq(min(dataset$Level), max(dataset$Level), 0.1)
+ggplot() + 
+  geom_point(aes(x = dataset$Level, y = dataset$Salary), 
+             color = 'red') + 
+  geom_line(aes(x = X_grid, y = predict(poly_reg, newdata = data.frame(Level = X_grid, 
+                                                                       Level2 = X_grid^2, 
+                                                                       Level3 = X_grid^3, 
+                                                                       Level4 = X_grid^4))), 
+            color = 'green') + 
+  ggtitle('Truth or Bluff (Polynomial Regression)') + 
+  xlab('Level') + 
+  ylab('Salary')
+```
+
+## 2.4 Support Vector Regression (SVR)
+### 2.4.1 SVR Intuition
+- Support Vector Machines (SVMs) support linear and nonlinear regression that we can refer to as SVR.
+- Instead of trying to fit the largest possible street between two classes while limiting margin violations, SVR tries to fit as many instances as possible on the street while limiting margin violations.
+- The width of the street is controlled by a hyper parameter $\epsilon$.
+
+In other words,
+- SVR performs linear regression in a higher (dimensional space).
+- We can think of SVR as if each data point in the training represents its own dimension. When you evaluate your kernel between a test point and a point in the training set, the resulting value gives you the coordinate of your test point in that dimension.
+- The vector we get when we evaluate the test point for all points in the training set, $\vec{k}$ is the representation of the test point in the higher dimensional space.
+- Once you have that vector you use it to perform a linear regression.
+
+**Building a SVR**
+- **STEP 1**: Collect a training set $\tau=\{\vec{X},\vec{Y}\}$
+- **STEP 2**: Choose a kernel and its parameters as well as any regularization needed.
+- **STEP 3**: Form the correlation matrix 
+
+$$K_{i,j}=\exp\Big(\sum_{k}\theta_k|x_k^i-x_k^j|^2\Big)+\epsilon\delta_{i,j}$$
+
+- **STEP 4**: Train your machine, exactly or approximately, to get contraction coefficients 
+
+$$\vec{\alpha}=K^{-1}\vec{y}$$
+
+where $\vec{y}$ is the vector of values corresponding to your training set, $K$ is your correlation matrix, and $\vec{\alpha}$ is the unknowns we need to solve for. 
+
+- **STEP 5**: Use those coefficients, create your estimator $f(\vec{X},\vec{y},x^{\star})=y^{\star}$
+
+To simplify, SVR has a different regression goal compared to linear regression. In linear regression we are trying to minimize the error between the prediction and data. In SVR our goal is to make sure that errors do not exceed the threshold. 
+
+### 2.4.2 SVR in R
+```{r}
+# Importing the dataset
+dataset = read.csv('Position_Salaries.csv')
+dataset = dataset[2:3]
+```
+
+```{r}
+# Fitting the SVR to the dataset
+library('e1071')
+regressor = svm(formula = Salary ~ ., 
+                data = dataset, 
+                type = 'eps-regression')
+```
+
+```{r}
+# Predicting a new result
+y_pred = predict(regressor, data.frame(Level = 6.5))
+y_pred
+```
+
+```{r}
+# Visualizing the SVR results
+ggplot() + 
+  geom_point(aes(x = dataset$Level, y = dataset$Salary), 
+              color = 'red') + 
+  geom_line(aes(x = dataset$Level, y = predict(regressor, newdata = dataset)), 
+            color = 'blue') + 
+  ggtitle('Truth or Bluff (SVR)') + 
+  xlab('Level') + 
+  ylab('Salary')
+```
+
+```{r}
+# Visualizing the polynomial regression results (for higher resolution and smoother curve)
+X_grid = seq(min(dataset$Level), max(dataset$Level), 0.1)
+ggplot() + 
+  geom_point(aes(x = dataset$Level, y = dataset$Salary), 
+             color = 'red') + 
+  geom_line(aes(x = X_grid, y = predict(regressor, newdata = data.frame(Level = X_grid))), 
+            color = 'green') + 
+  ggtitle('Truth or Bluff (SVR Regression)') + 
+  xlab('Level') + 
+  ylab('Salary')
+```
+
+## 2.5 Decision Tree Regression
+### 2.5.1 Decision Tree Regression Intuition
+### 2.5.2 Decision Tree Regression in R
+Since decision tree and random forest regression is a type of discrete regression, we don't need the feature scaling.
+
+```{r}
+# Fitting the decision tree regression to the dataset
+library(rpart)
+regressor = rpart(formula = Salary ~ ., 
+                  data = dataset, 
+                  control = rpart.control(minsplit = 1))
+```
+
+```{r}
+# Predicting a new result
+y_pred = predict(regressor, newdata = data.frame(Level  =6.5))
+y_pred
+```
+
+```{r}
+# Visualizing the decision tree model
+ggplot() + 
+  geom_point(aes(x = dataset$Level, y = dataset$Salary), 
+       color = 'red') + 
+  geom_line(aes(x = dataset$Level, y = predict(regressor, newdata = dataset)), 
+            color = 'blue') + 
+  ggtitle('Truth or Bluff (Decision Tree Regression)') + 
+  xlab('Level') + 
+  ylab('Salary')
+```
+
+```{r}
+# Visualizing the decision tree model (for higher resolution and smoother curve)
+x_grid = seq(min(dataset$Level), max(dataset$Level), 0.01)
+ggplot() + 
+  geom_point(aes(x = dataset$Level, y = dataset$Salary), 
+             color = 'red') + 
+  geom_line(aes(x = x_grid, y = predict(regressor, newdata = data.frame(Level = x_grid))), 
+            color = 'blue') + 
+  ggtitle('Truth or Bluff (Decision Tree Regression)') + 
+  xlab('Level') + 
+  ylab('Salary')
+```
+
+## 2.6 Random Forest Regression
+## 2.6.1 Random Forest Regression Intuition
+- STEP 1: Pick at random $K$ data points from the training set.
+- STEP 2: Build the decision tree associated to these $K$ data points.
+- STEP 3: Choose the number of Ntree of trees you want to build and repeat STEPS 1&2.
+- STEP 4: For a new data point, make each one of your Ntree trees predict the value of $Y$ for the data point in question, and assign the new data point the average across all of the predicted $Y$ values.
+
+## 2.6.2 Random Forest Regression in R
+Remember that `dataset[1]` well get the subset of a data frame, while `dataset$Salary` will get a vector
+```{r}
+# Fitting random forest regression to the dataset
+library(randomForest)
+set.seed(123)
+regressor = randomForest(x = dataset[1], 
+                         y = dataset$Salary, 
+                         ntree = 500)
+```
+
+```{r}
+# Predicting a new result
+y_pred = predict(regressor, data.frame(Level = 6.5))
+y_pred
+```
+
+```{r}
+# Visualizing the regression model results (for higher resolution and smoother curve)
+X_grid = seq(min(dataset$Level), max(dataset$Level), 0.01)
+ggplot() + 
+  geom_point(aes(x = dataset$Level, y = dataset$Salary), 
+            color = 'red') + 
+  geom_line(aes(x = X_grid, y = predict(regressor, newdata = data.frame(Level = X_grid))), 
+            color = 'blue') + 
+  ggtitle('Truth or Bluff (Random Forest Regression)') + 
+  xlab('Level') + 
+  ylab('Salary')
+```
+
+## 2.7 Evaluating Regression Models Performance
+### 2.7.1 R-Squared Intuition
+- Residual Sum of Squares (RSS), the Sum of Squared Residuals (SSR), the Sum of Squared Estimate of Errors (SSE):
+
+$$\text{SS}_{res}=\sum_{i=1}^{n}(y_{i}-\hat{y}_{i})^2$$
+
+- The Total Sum of Squares (SST or TSS):
+
+$$\text{SS}_{tot}=\sum_{i=1}^{n}(y_{i}-y_{avg})^2$$
+
+- R-Squared:
+
+$$R^2=1-\frac{\text{SS}_{res}}{\text{SS}_{tot}}$$
+
+### 2.7.2 Adjusted R-Squared Intuition
+$R^2$ measures the goodness of fit. The greater it is, the better it is. When we add new variables to the model, we can look at the increase or decrease of $R^2$ to see if the model fits the dataset better. However, $R^2$ will never decrease because when we add new variables, the model will always find coefficients to minimize $\text{SS}_{res}$, making it smaller than it used to be. So the $R^2$ will increase or won't change. Thus, we cannot identify if the $R^2$ helps the model or not, and that is adjusted R-Squared comes in:
+
+$$\text{Adj }R^2=1-(1-R^2)\frac{n-1}{n-p-1}$$
+
+where $p$ is the number of independent variables and $n$ is the sample size. It is obvious that adjusted R-Squared has a penalized factor which can decrease the value when the number of independent variables increases. 
+
+## 2.8 Conclusion
+### 2.8.1 What are the pros and cons of each model ?
+- Linear Regression:
+    - Pros: Works on any size of dataset, gives informations about relevance of features
+    - Cons: The Linear Regression Assumptions
+
+- Polynomial Regression: 
+    - Pros: Works on any size of dataset, works very well on nonlinear problems
+    - Cons: Need to choose the right polynomial degree for a good bias/variance tradeoff
+   
+- SVR: 
+    - Pros: Easily adaptable, works very well on non linear problems, not biased by outliers
+    - Cons: Compulsory to apply feature scaling, not well known, more difficult to understand
+
+- Decision Tree Regression: 
+    - Pros: Interpretability, no need for feature scaling, works on both linear / nonlinear problems
+    - Cons: Poor results on too small datasets, overfitting can easily occur
+    
+- Random Forest Regression: 
+    - Pros: Powerful and accurate, good performance on many problems, including non linear
+    - Cons: No interpretability, overfitting can easily occur, need to choose the number of trees
+    
+### 2.8.2 How do I know which model to choose for my problem?
+
+First, you need to figure out whether your problem is linear or non linear. You will learn how to do that in Part 10 - Model Selection. Then:
+
+If your problem is linear, you should go for Simple Linear Regression if you only have one feature, and Multiple Linear Regression if you have several features.
+
+If your problem is non linear, you should go for Polynomial Regression, SVR, Decision Tree or Random Forest. Then which one should you choose among these four ? That you will learn in Part 10 - Model Selection. The method consists of using a very relevant technique that evaluates your models performance, called k-Fold Cross Validation, and then picking the model that shows the best results. Feel free to jump directly to Part 10 if you already want to learn how to do that.
+
+### 2.8.3 How can I improve each of these models?
+
+In Part 10 - Model Selection, you will find the second section dedicated to Parameter Tuning, that will allow you to improve the performance of your models, by tuning them. You probably already noticed that each model is composed of two types of parameters:
+
+- the parameters that are learnt, for example the coefficients in Linear Regression,
+
+- the hyperparameters.
+
+The hyperparameters are the parameters that are not learnt and that are fixed values inside the model equations. For example, the regularization parameter lambda or the penalty parameter C are hyperparameters. So far we used the default value of these hyperparameters, and we haven't searched for their optimal value so that your model reaches even higher performance. Finding their optimal value is exactly what Parameter Tuning is about. So for those of you already interested in improving your model performance and doing some parameter tuning, feel free to jump directly to Part 10 - Model Selection.
+
+### 2.8.4 What is regularization?
+Sometimes the fitting curve fits the data perfectly well. But if we look at new observations, we can get large errors. This is due to overfitting. Regularization can reduce overfitting. For linear regression, we have three types of regularization:
+
+- Ridge Regression:
+
+$$\min\sum_{i=1}^n\big(y^{(i)}-(b_0+b_1x_1^{(i)}+\cdots+b_m x_m^{(i)})\big)^2+\lambda(b_1^2+\cdots+b_m^2)$$
+
+- Lasso:
+
+$$\min\sum_{i=1}^n\big(y^{(i)}-(b_0+b_1x_1^{(i)}+\cdots+b_m x_m^{(i)})\big)^2+\lambda(|b_1|+\cdots+|b_m|)$$
+
+- Elastic Net:
+
+$$\min\sum_{i=1}^n\big(y^{(i)}-(b_0+b_1x_1^{(i)}+\cdots+b_m x_m^{(i)})\big)^2+\lambda(|b_1|+\cdots+|b_m|)+\lambda(b_1^2+\cdots+b_m^2)$$
