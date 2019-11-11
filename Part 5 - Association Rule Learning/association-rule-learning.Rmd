@@ -1,0 +1,75 @@
+---
+title: "Part 5 Association Rule Learning"
+output: html_notebook
+---
+
+`header=FALSE` means that there is no title in the dataset.
+
+```{r}
+dataset = read.csv('Market_Basket_Optimisation.csv', header = FALSE)
+head(dataset)
+```
+
+## 5.1 Apriori
+### 5.1.1 Apriori Intuition
+Apriori algorithm is about people who bought A also bought B. This algorithm contains three parts and we take market basket optimization as an example.
+
+**Support**:
+
+$$\text{support}(l)=\frac{\text{the number of transactions containing }l}{\text{the number of transactions}}$$
+
+**confidence**:
+
+$$\text{confidence}(l_1\rightarrow l_2)=\frac{\text{the number of transactions containing }l_1\text{ and }l_2}{\text{the number of transactions containing }l_1}$$
+
+**lift**:
+
+$$\text{lift}(l_1\rightarrow l_2)=\frac{\text{confidence}(l_1\rightarrow l_2)}{\text{support}(l_2)}$$
+
+Overall, the step-by-step process of Apriori algorithm is:
+
+- **STEP 1**: Set a minimum support and confidence. 
+- **STEP 2**: Take all the subsets in transactions having higher support than minimum support.
+- **STEP 3**: Take all the rules of these subsets having higher confidence than minimum confidence.
+- **STEP 4**: Sort the rules by decreasing lift. 
+
+### 5.1.2 Apriori in R
+In `R`, we need to convert the dataset into a sparse matrix in order to be fitted in Apriori algorithm model.
+
+```{r}
+# Converting the dataset into a sparse matrix
+library(arules)
+dataset = read.transactions('Market_Basket_Optimisation.csv', sep = ',', rm.duplicates = TRUE)
+summary(dataset)
+```
+
+This information above shows that:
+
+- There are $5$ transactions containing $1$ duplicate. 
+- There are $7501$ transactions with $119$ products in total. There are the proportion of $0.03$ containing non-zero values.
+- The most frequent item is `mineral water` which has been bought $1788$ times.
+- There are $1754$ baskets containing only $1$ item and $1358$ baskets containing $2$ items.
+- The minimum value of the basket is $1$ product and the maximum value of the basket is $20$ products. On average, people put $4$ products in their baskets. 
+
+```{r}
+# Visualizing the frequency of products
+itemFrequencyPlot(dataset, topN = 10)
+```
+
+Here we only consider the product bought by over $3$ times a day, so `support` will be $3\times7\div7500$ which is equal to $0.0028$.
+
+```{r}
+# Training Apriori on the dataset
+rules = apriori(data = dataset, parameter = list(support = 0.003, confidence = 0.2))
+```
+
+From the information above, we have found $281$ associations in the dataset with the given minimum support and confidence. 
+
+However, this algorithm can encounter some problems. If we choose `confidence = 0.4` and see row $[6]$, we can find that people who buy `chocolate` and `herb & pepper` may also buy `ground beef`. This is not reasonable. This rule has a high confidence just because it is associated with the basket with most frequenly bought product. In order to avoid this, we don't want to change `support`. Instead, we need to change `confidence`. 
+
+```{r}
+# Visualizing the results
+inspect(sort(rules, by = 'lift')[1:10])
+```
+
+Again, the row $[8]$ has a high confidence just because most people tend to buy `cereals` and `spaghetti`. So this row should be considered carefully. 
