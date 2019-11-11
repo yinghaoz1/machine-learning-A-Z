@@ -73,3 +73,31 @@ inspect(sort(rules, by = 'lift')[1:10])
 ```
 
 Again, the row $[8]$ has a high confidence just because most people tend to buy `cereals` and `spaghetti`. So this row should be considered carefully. 
+
+## 5.2 Eclat
+### 5.2.1 Eclat Intuition
+In Eclat model, we only have support:
+
+$$\text{support}(l)=\frac{\text{the number of transactions containing }l}{\text{the number of transactions}}$$
+
+$l$ stands for the set of two or more items. 
+
+Overall, the step-by-step process of Eclat algorithm is:
+
+- **STEP 1**: Set a minimum support. 
+- **STEP 2**: Take all the subsets in transactions having higher support than minimum support.
+- **STEP 3**: Sort these subsets by decreasing support. 
+
+### 5.2.2 Eclat in R
+In `eclat`, we set `minlen = 2` to indicate we need at least $2$ items in each set.
+```{r}
+# Training eclat on the dataset
+rules = eclat(data = dataset, parameter = list(support = 0.003, minlen = 2))
+```
+
+From the information above, we have $845$ sets rather than rules.
+
+```{r}
+# Visualizing the results
+inspect(sort(rules, by = 'support')[1:10])
+```
