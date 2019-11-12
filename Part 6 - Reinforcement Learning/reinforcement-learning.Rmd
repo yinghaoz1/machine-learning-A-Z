@@ -1,0 +1,108 @@
+---
+title: "Part 6 Reinforcement Learning"
+output: html_notebook
+---
+
+```{r}
+# Importing the dataset
+dataset = read.csv('Ads_CTR_optimisation.csv')
+head(dataset)
+```
+
+We firstly use random selection algorithm to see the total reward.
+
+```{r}
+# Implementing random selection
+N = 10000
+d = 10
+ads_selected = integer(0)
+total_reward = 0
+for (n in 1:N) {
+  ad = sample(1:10, 1)
+  ads_selected = append(ads_selected, ad)
+  reward = dataset[n, ad]
+  total_reward = total_reward + reward
+}
+
+total_reward
+```
+
+```{r}
+# Visualizing the results
+hist(ads_selected, 
+     col = 'blue', 
+     main = 'Histogram of Ads Selections (Random Selection)', 
+     xlab = 'Ads', 
+     ylab = 'Number of Times Each Ad Was Selected')
+```
+
+## 6.1 Upper Confidence Bound (UCB)
+### 6.1.1 The Multi-Armed Bandit Problem
+- We have $d$ arms. For example, arms are ads that we display to users each time they connect to a web page.
+- Each times a user connects to this web page, that makes a round.
+- At each round $n$, we choose one ad to display to the user.
+- At each round $n$, ad $i$ gives reward $r_i(n)\in\{0,1\}$ if the user clicked on ad $i$, $0$ if the user didn't.
+- Our goal is to maximize the total reward we get over many rounds.
+
+### 6.1.2 UCB Intuition
+- **STEP 1**: At each round $n$, we consider two numbers for each ad $i$:
+    - $N_i(n)$ - the number of times the ad $i$ was selected up to round $n$.
+    - $R_i(n)$ - the sum of rewards of the ad $i$ up to round $n$.
+
+
+- **STEP 2**: From these two numbers we compute:
+    - the average reward of ad $i$ up to round $n$:
+    
+    $$\bar{r}_i(n)=\frac{R_i(n)}{N_i(n)}$$
+    
+    - the confidence interval $[\bar{r}_i(n)-\Delta_i(n), \bar{r}_i(n)+\Delta_i(n)]$ at around $n$ with
+    
+    $$\Delta_i(n)=\sqrt{\frac{3}{2}\frac{\log(n)}{N_i(n)}}$$
+
+
+- **STEP 3**: We select the ad $i$ has the maximum UCB $\bar{r}_i(n)+\Delta_i(n)$.
+
+### 6.1.3 UCB in R
+```{r}
+# Implementing UCB
+N = 10000
+d = 10
+ads_selected = integer(0)
+numbers_of_selections = integer(d)
+sums_of_rewards = integer(d)
+total_reward = 0
+for (n in 1:N) {
+  ad = 0
+  max_upper_bound = 0
+  # This for loop is used to decide which ad will be selected, with the condition that each ad  # will be selected one by one in the first 10 round.
+  for (i in 1:d) {
+    if (numbers_of_selections[i] > 0) {
+      average_reward = sums_of_rewards[i] / numbers_of_selections[i]
+      delta_i = sqrt(3/2 * log(n) / numbers_of_selections[i])
+      upper_bound = average_reward + delta_i
+    } else {
+      upper_bound = 1e400
+    }
+    if (upper_bound > max_upper_bound) {
+      max_upper_bound = upper_bound
+      ad = i
+    }
+  }
+  ads_selected = append(ads_selected, ad)
+  numbers_of_selections[ad] = numbers_of_selections[ad] + 1
+  reward = dataset[n, ad]
+  sums_of_rewards[ad] = sums_of_rewards[ad] + reward
+  total_reward = total_reward + reward
+}
+
+total_reward
+```
+
+```{r}
+# Visualizing the results
+hist(ads_selected, 
+     col = 'blue', 
+     main = 'Histogram of Ads Selections (UCB)', 
+     xlab = 'Ads', 
+     ylab = 'Number of Times Each Ad Was Selected')
+```
