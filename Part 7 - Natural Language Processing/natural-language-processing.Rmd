@@ -1,0 +1,214 @@
+---
+title: "Part 7 Natural Language Processing"
+output: html_notebook
+---
+
+Natural language processing (NLP) is an area of computer science and artificial intelligence concerned with the interactions between computers and human (natural) languages. NLP is used to apply machine learning models to text and language.
+
+## 7.1 Text Preprocessing
+`quote = ''` means ignoring any quotes in the text. `stringsAsFactors = FALSE` means we do not consider `Review` as a factor.
+
+```{r}
+# Importing the dataset
+dataset_original = read.delim('Restaurant_Reviews.tsv', quote = '', stringsAsFactors = FALSE)
+head(dataset_original)
+```
+
+Here are the text cleaning steps:
+- **STEP 1**: Make all words lowercase.
+- **STEP 2**: Remove all numbers in the text.
+- **STEP 3**: Remove all punctuations in the text.
+- **STEP 4**: Remove all stop words in the text.
+- **STEP 5**: Stemming, or taking the root of the word.
+- **STEP 6**: Remove redundant white space. 
+
+```{r}
+# Cleaning the texts
+library(tm)
+library(SnowballC)
+corpus = VCorpus(VectorSource(dataset_original$Review))
+corpus = tm_map(corpus, content_transformer(tolower))
+corpus = tm_map(corpus, removeNumbers)
+corpus = tm_map(corpus, removePunctuation)
+corpus = tm_map(corpus, removeWords, stopwords())
+corpus = tm_map(corpus, stemDocument)
+corpus = tm_map(corpus, stripWhitespace)
+as.character(corpus[[1]])
+```
+
+The bag of words model will create a sparse matrix `X` with the column including each word, the row including each review, and the cell including the occurence of each word in each review.
+
+In `removeSparseTerms`, we need to specify:
+- `sparse`: A numeric for the maximal allowed sparsity in the range from bigger zero to smaller one.
+```{r}
+# Creating the bag of words model and filtering the non-frequent words
+dtm = DocumentTermMatrix(corpus)
+dtm = removeSparseTerms(dtm, 0.999)
+dtm
+```
+
+```{r}
+# Converting dtm to the dataset
+dataset = as.data.frame(as.matrix(dtm))
+dataset$Liked = dataset_original$Liked
+head(dataset)
+```
+
+```{r}
+# Encoding the target feature as factor
+dataset$Liked = factor(dataset$Liked, levels = c(0, 1))
+```
+
+```{r}
+# Splitting the dataset into the training and test set
+library(caTools)
+set.seed(123)
+split = sample.split(dataset$Liked, SplitRatio = 0.8)
+training_set = subset(dataset, split == TRUE)
+test_set = subset(dataset, split == FALSE)
+```
+
+## 7.2 Classification Model Selection
+### 7.2.1 Logistic Regression
+```{r}
+# Fitting logistic regression to the training set
+classifier = glm(formula = Liked ~ ., 
+                 family = binomial, 
+                 data = training_set)
+```
+
+```{r}
+# Predicting the test set results
+prob_pred = predict(classifier, type = 'response', newdata = test_set[-692])
+y_pred = ifelse(prob_pred > 0.5, 1, 0)
+y_pred
+```
+
+```{r}
+# Making the confusion matrix
+cm = table(test_set[, 692], y_pred)
+cm
+```
+
+### 7.2.2 K-NN
+```{r}
+# Fitting K-NN to the training set and predicing the test set results
+library(class)
+y_pred = knn(train = training_set[, -692], 
+             test = test_set[, -692], 
+             cl = training_set[, 692], 
+             k = 5)
+y_pred
+```
+
+```{r}
+# Making the confusion matrix
+cm = table(test_set[, 692], y_pred)
+cm
+```
+
+### 7.2.3 Linear SVM
+```{r}
+# Fitting SVM to the training set
+library(e1071)
+classifier = svm(formula = Liked ~ ., 
+                 data = training_set, 
+                 type = 'C-classification', 
+                 kernel = 'linear')
+```
+
+```{r}
+# Predicting the test set results
+y_pred = predict(classifier, newdata = test_set[-692])
+y_pred
+```
+
+```{r}
+# Making the confusion matrix
+cm = table(test_set[, 692], y_pred)
+cm
+```
+
+### 7.2.4 Kernel SVM
+```{r}
+# Fitting SVM to the training set
+library(e1071)
+classifier = svm(formula = Liked ~ ., 
+                 data = training_set, 
+                 type = 'C-classification', 
+                 kernel = 'linear')
+```
+
+```{r}
+# Predicting the test set results
+y_pred = predict(classifier, newdata = test_set[-692])
+y_pred
+```
+
+```{r}
+# Making the confusion matrix
+cm = table(test_set[, 692], y_pred)
+cm
+```
+
+### 7.2.5 Naive Bayes
+```{r}
+# Fitting naive Bayes to the training set
+library(e1071)
+classifier = naiveBayes(x = training_set[-692], 
+                        y = training_set$Liked)
+```
+
+```{r}
+# Predicting the test set results
+y_pred = predict(classifier, newdata = test_set[-692])
+y_pred
+```
+
+```{r}
+# Making the confusion matrix
+cm = table(test_set[, 692], y_pred)
+cm
+```
+
+### 7.2.6 Decision Tree
+```{r}
+# Fitting the classifier to the training set
+library(rpart)
+classifier = rpart(formula = Liked ~ ., 
+                   data = training_set)      
+```
+
+```{r}
+# Predicting the Test set results
+y_pred = predict(classifier, newdata = test_set[-692], type = 'class')
+y_pred
+```
+
+```{r}
+# Making the Confusion Matrix
+cm = table(test_set[, 692], y_pred)
+cm
+```
+
+### 7.2.7 Random Forest
+```{r}
+# Fitting Random Forest Classification to the Training set
+library(randomForest)
+classifier = randomForest(x = training_set[-692],
+                          y = training_set$Liked,
+                          ntree = 10)
+```
+
+```{r}
+# Predicting the Test set results
+y_pred = predict(classifier, newdata = test_set[-692])
+y_pred
+```
+
+```{r}
+# Making the Confusion Matrix
+cm = table(test_set[, 692], y_pred)
+cm
+```
+

@@ -106,3 +106,87 @@ hist(ads_selected,
      xlab = 'Ads', 
      ylab = 'Number of Times Each Ad Was Selected')
 ```
+
+## 6.2 Thompson Sampling
+### 6.2.1 Thompson Sampling Intuition
+- **STEP 1**: At each round $n$, we consider two numbers for each ad $i$:
+    - $N_i^1(n)$ - the number of times the ad $i$ got reward $1$ up to round $n$.
+    - $N_i^0(n)$ - the number of times the ad $i$ got reward $0$ up to round $n$.
+    
+    
+- **STEP 2**: For each ad $i$, we take an random draw from the distribution below:
+
+$$\theta_i(n)=\beta(N_i^1(n)+1,N_i^0(n)+1)$$
+
+- **STEP 3**: We select the ad that has the highest $\theta_i(n)$.
+
+In Thompson sampling, we build the distributions to guess where we think $\mu^*$ values will be. We are NOT trying to guess the distributions behind the machines.
+
+### 6.2.2 Bayesian Inference
+- Ad $i$ gets rewards $y$ from Bernoulli distribution $p(y|\theta_i)\sim B(\theta_i)$.
+- $\theta_i$ is unknown but we set its uncertainty by assuming it has a uniform distribution $p(\theta_i)\sim U([0,1]), which is the prior distribution$
+- Bayes rules: we approach $\theta_i$ by the posterior distribution:
+
+$$p(\theta_i|y)=\frac{p(y|\theta_i)p(\theta_i)}{\int p(y|\theta_i)p(\theta_i)d\theta_i}\propto p(y|\theta_i)p(\theta_i)$$
+
+where $p(\theta_i|y)$ is the posterior distribution,$p(y|\theta_i)$ is the likelihood function, and $p(\theta_i)$ is the prior distribution.
+
+- We get $p(\theta_i|y)\sim \beta(\text{number of successes}+1,\text{number of failures}+1)$
+- At each round $n$ we take a random draw $\theta_i(n)$ from this posterior distribution $p(\theta_i|y)$, for each id $i$.
+- At each round $n$ we select ad $i$ that has the highest $\theta_i(n)$.
+
+### 6.2.3 Algorithm Comparison: UCB & Thompson Sampling
+- **UCB**:
+    - Deterministic
+    - Require update at every round
+    
+    
+- **Thompson Sampling**:
+    - Probabilistic
+    - Can accomodate delayed feedback
+    - Better empirical evidence
+
+### 6.2.4 Thompson Sampling in R
+```{r}
+# Implementing Thompson sampling
+N = 10000
+d = 10
+ads_selected = integer(0)
+numbers_of_rewards_1 = integer(d)
+numbers_of_rewards_0 = integer(d)
+total_reward = 0
+for (n in 1:N) {
+  ad = 0
+  max_random = 0
+  for (i in 1:d) {
+    random_beta = rbeta(n = 1, 
+                        shape1 = numbers_of_rewards_1[i] + 1, 
+                        shape2 = numbers_of_rewards_0[i] + 1)
+    if (random_beta > max_random) {
+      max_random = random_beta
+      ad = i
+    }
+  }
+  ads_selected = append(ads_selected, ad)
+  reward = dataset[n, ad]
+  if (reward == 1) {
+    numbers_of_rewards_1[ad] = numbers_of_rewards_1[ad] + 1
+  } else {
+    numbers_of_rewards_0[ad] = numbers_of_rewards_0[ad] + 1
+  }
+  total_reward = total_reward + reward
+}
+
+total_reward
+```
+
+Obviously, Thompson sampling beats UCB in this case.
+
+```{r}
+# Visualizing the results
+hist(ads_selected, 
+     col = 'blue', 
+     main = 'Histogram of Ads Selections (Thompson Sampling)', 
+     xlab = 'Ads', 
+     ylab = 'Number of Times Each Ad Was Selected')
+```
