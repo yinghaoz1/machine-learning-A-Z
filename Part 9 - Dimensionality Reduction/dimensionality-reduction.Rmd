@@ -1,0 +1,325 @@
+---
+title: "Part 9 Dimensionality Reduction"
+output: html_notebook
+---
+
+There are two ways for dimensionality Reduction:
+- Feature Selection:
+    - Backward Elimination
+    - Forward Elimination
+    - Bidirectional Elimination
+    - Score Comparison
+
+
+- Feature Extraction:
+    - PCA
+    - LDA
+    - Kernel PCA
+    
+## 9.1 Principle Component Analysis (PCA)
+### 9.1.1 PCA Intuition
+
+PCA is used to reduce the dimensions of a $d$-dimensional dataset by projecting it onto a ($k$)-dimensional subspace (where $k<d$). PCA extracts new independent variables explain the most the variance of the dataset. The fact that the DV is not considered makes PCA an unsupervised model. The goal of PCA is to:
+- Identify patterns in data
+- Detect the correlation between variables
+
+The algorithm of PCA is:
+- **STEP 1**: Standardize the data.
+- **STEP 2**: Obtain the eigenvectors and eigenvalues from the covariance matrix or correlation matrix, or perform singular vector decomposition.
+- **STEP 3**: Sort eigenvalues in descending order and choose the $k$ eigenvectors that correspond to the $k$ largest eigenvalues where $k$ is the number of dimensions of the new feature subspace ($k\leq d$).
+- **STEP 4**: Construct the projection matrix $W$ from the selected $k$ eigenvectors.
+- **STEP 5**: Transform the original dataset $X$ via $W$ to obtain a $k$-dimensional feature subspace $Y$.
+
+### 9.1.2 PCA in R
+```{r}
+# Importing the dataset
+dataset = read.csv('Wine.csv')
+head(dataset)
+```
+
+```{r}
+# Splitting the dataset into the training and test set
+library(caTools)
+set.seed(123)
+split = sample.split(dataset$Customer_Segment, SplitRatio = 0.8)
+training_set = subset(dataset, split == TRUE)
+test_set = subset(dataset, split == FALSE)
+```
+
+```{r}
+# Feature scaling
+training_set[-14] = scale(training_set[-14])
+test_set[-14] = scale(test_set[-14])
+```
+
+```{r}
+# Apply PCA
+library(caret)
+pca = preProcess(x = training_set[-14], 
+                 method = 'pca', 
+                 pcaComp = 2)
+training_set = predict(pca, training_set)
+training_set = training_set[c(2, 3, 1)]
+test_set = predict(pca, test_set)
+test_set = test_set[c(2, 3, 1)]
+```
+
+```{r}
+# Fitting SVM to the training set
+library(e1071)
+classifier = svm(formula = Customer_Segment ~ .,
+                 data = training_set, 
+                 type = 'C-classification', 
+                 kernel = 'linear')
+```
+
+```{r}
+# Predicing the test set results
+y_pred = predict(classifier, newdata = test_set[-3])
+y_pred
+```
+
+```{r}
+# Making the confusion matrix
+cm = table(test_set[, 3], y_pred)
+cm
+```
+
+```{r}
+# Visualizing the training set results
+library(ElemStatLearn)
+set = training_set
+X1 = seq(min(set[, 1]) - 1, max(set[, 1]) + 1, by = 0.01)
+X2 = seq(min(set[, 2]) - 1, max(set[, 2]) + 1, by = 0.01)
+grid_set = expand.grid(X1, X2)
+colnames(grid_set) = c('PC1', 'PC2')
+y_grid = predict(classifier, newdata = grid_set)
+plot(set[, -3], 
+     main = 'SVM (Training Set with PCA)', 
+     xlab = 'PC1', ylab = 'PC2', 
+     xlim = range(X1), ylim = range(X2))
+contour(X1, X2, matrix(as.numeric(y_grid), length(X1), length(X2)), add = TRUE)
+points(grid_set, pch = '.', col = ifelse(y_grid == 2, 'deepskyblue', ifelse(y_grid == 1, 'springgreen3', 'tomato')))
+points(set, pch = 21, bg = ifelse(set[, 3] == 2, 'blue3', ifelse(set[, 3] == 1, 'green4', 'red3')))
+```
+
+```{r}
+# Visualizing the test set results
+library(ElemStatLearn)
+set = test_set
+X1 = seq(min(set[, 1]) - 1, max(set[, 1]) + 1, by = 0.01)
+X2 = seq(min(set[, 2]) - 1, max(set[, 2]) + 1, by = 0.01)
+grid_set = expand.grid(X1, X2)
+colnames(grid_set) = c('PC1', 'PC2')
+y_grid = predict(classifier, newdata = grid_set)
+plot(set[, -3], 
+     main = 'SVM (Test Set with PCA)', 
+     xlab = 'PC1', ylab = 'PC2', 
+     xlim = range(X1), ylim = range(X2))
+contour(X1, X2, matrix(as.numeric(y_grid), length(X1), length(X2)), add = TRUE)
+points(grid_set, pch = '.', col = ifelse(y_grid == 2, 'deepskyblue', ifelse(y_grid == 1, 'springgreen3', 'tomato')))
+points(set, pch = 21, bg = ifelse(set[, 3] == 2, 'blue3', ifelse(set[, 3] == 1, 'green4', 'red3')))
+```
+
+## 9.2 Linear Discriminant Analysis (LDA)
+### 9.2.1 LDA Intuition
+LDA is:
+- Used as a dimensionality reduction technique
+- Used in the pre-processing step for pattern classification
+- Has the goal to project a dataset onto a lower-dimensional space
+
+It sounds similar to PCA. But LDA differs because in addition to finding the component axies with LDA we are interested in the axes that maximize the separation between multiple classes. The goal of LDA is to project a feature space (a dataset $n$-dimensional sample) onto a small subspace $k$ (where $k\leq n-1$) while maintaining the class-discriminatory information. Both PCA and LDA are linear transformation techniques used for dimensionality reduction. PCA is described as unsupervised but LDA is supervised because of the relation to the dependent variable.
+
+The algorithm of LDA is:
+- **STEP 1**: Compute the $d$-dimensional mean vectors for the different classes from the dataset.
+- **STEP 2**: Compute the scatter matrices (in-between-class and within-class scatter matrix).
+- **STEP 3**: Compute the eigenvectors ($e_1,e_2,\dots,e_d$) and corresponding eigenvalues($\lambda_1,\lambda_2,\dots,\lambda_d$) for the scatter matrices.
+- **STEP 4**: Sort the eigenvectors by decreasing eigenvalues and choose $k$ eigenvectors with the largest eigenvalues to form a $d\times k$ dimensional matrix $W$ (where every column represents a eigenvector).
+- **STEP 5**: Use this $d\times k$ eigenvector matrix to transform the samples onto the new subspace. This can be summarized by the matrix multiplication: $Y=X\times W$ (where $X$ is a $n\times d$-dimensional matrix representing the $n$ samples, and $y$ are the transformed $n\times d$-dimensional samples in the new subspace).
+
+### 9.2.2 LDA in R
+```{r}
+# Splitting the dataset into the training and test set
+library(caTools)
+set.seed(123)
+split = sample.split(dataset$Customer_Segment, SplitRatio = 0.8)
+training_set = subset(dataset, split == TRUE)
+test_set = subset(dataset, split == FALSE)
+```
+
+```{r}
+# Feature scaling
+training_set[-14] = scale(training_set[-14])
+test_set[-14] = scale(test_set[-14])
+```
+
+```{r}
+# Applying LDA
+library(MASS)
+lda = lda(formula = Customer_Segment ~ ., data = training_set)
+training_set = as.data.frame(predict(lda, training_set))
+training_set = training_set[c(5, 6, 1)]
+test_set = as.data.frame(predict(lda, test_set))
+test_set = test_set[c(5, 6, 1)]
+```
+
+```{r}
+# Fitting SVM to the training set
+library(e1071)
+classifier = svm(formula = class ~ .,
+                 data = training_set, 
+                 type = 'C-classification', 
+                 kernel = 'linear')
+```
+
+```{r}
+# Predicing the test set results
+y_pred = predict(classifier, newdata = test_set[-3])
+y_pred
+```
+
+```{r}
+# Making the confusion matrix
+cm = table(test_set[, 3], y_pred)
+cm
+```
+
+```{r}
+# Visualizing the training set results
+library(ElemStatLearn)
+set = training_set
+X1 = seq(min(set[, 1]) - 1, max(set[, 1]) + 1, by = 0.01)
+X2 = seq(min(set[, 2]) - 1, max(set[, 2]) + 1, by = 0.01)
+grid_set = expand.grid(X1, X2)
+colnames(grid_set) = c('x.LD1', 'x.LD2')
+y_grid = predict(classifier, newdata = grid_set)
+plot(set[, -3], 
+     main = 'SVM (Training Set with LDA)', 
+     xlab = 'LD1', ylab = 'LD2', 
+     xlim = range(X1), ylim = range(X2))
+contour(X1, X2, matrix(as.numeric(y_grid), length(X1), length(X2)), add = TRUE)
+points(grid_set, pch = '.', col = ifelse(y_grid == 2, 'deepskyblue', ifelse(y_grid == 1, 'springgreen3', 'tomato')))
+points(set, pch = 21, bg = ifelse(set[, 3] == 2, 'blue3', ifelse(set[, 3] == 1, 'green4', 'red3')))
+```
+
+```{r}
+# Visualizing the test set results
+library(ElemStatLearn)
+set = training_set
+X1 = seq(min(set[, 1]) - 1, max(set[, 1]) + 1, by = 0.01)
+X2 = seq(min(set[, 2]) - 1, max(set[, 2]) + 1, by = 0.01)
+grid_set = expand.grid(X1, X2)
+colnames(grid_set) = c('x.LD1', 'x.LD2')
+y_grid = predict(classifier, newdata = grid_set)
+plot(set[, -3], 
+     main = 'SVM (Test Set with LDA)', 
+     xlab = 'LD1', ylab = 'LD2', 
+     xlim = range(X1), ylim = range(X2))
+contour(X1, X2, matrix(as.numeric(y_grid), length(X1), length(X2)), add = TRUE)
+points(grid_set, pch = '.', col = ifelse(y_grid == 2, 'deepskyblue', ifelse(y_grid == 1, 'springgreen3', 'tomato')))
+points(set, pch = 21, bg = ifelse(set[, 3] == 2, 'blue3', ifelse(set[, 3] == 1, 'green4', 'red3')))
+```
+
+## 9.3 Kernel PCA
+Kernel PCA is able to extract the feature which is linearly separable. 
+
+```{r}
+# Importing the dataset
+dataset = read.csv('Social_Network_Ads.csv')
+dataset = dataset[3:5]
+head(dataset)
+```
+
+```{r}
+# Splitting the dataset into the training and test set
+library(caTools)
+set.seed(123)
+split = sample.split(dataset$Purchased, SplitRatio = 0.8)
+training_set = subset(dataset, split == TRUE)
+test_set = subset(dataset, split == FALSE)
+```
+
+```{r}
+# Feature scaling
+training_set[-3] = scale(training_set[-3])
+test_set[-3] = scale(test_set[-3])
+```
+
+In `kpca` method, we need to specify arguments:
+- `x`: the data matrix indexed by row or a formula describing the model, `~.` is a trick to make `kpca` understand the model.
+- `data`: an optional data frame containing the variables in the model (when using a formula) without the DV.
+- `kernel`: the kernel function used in training and predicting. `rbfdot`: Radial Basis kernel function "Gaussian"
+- `features`: Number of features (principal components) to return.
+
+By applying the method `kpca`, we will lost the DV so we need to add two new variables `training_set_pca` and `test_set_pca`.
+
+```{r}
+# Applying kernel PCA
+library(kernlab)
+kpca = kpca(~., 
+            data = training_set[-3], 
+            kernel = 'rbfdot', 
+            features = 2)
+training_set_pca = as.data.frame(predict(kpca, training_set))
+training_set_pca$Purchased = training_set$Purchased
+test_set_pca = as.data.frame(predict(kpca, test_set))
+test_set_pca$Purchased = test_set$Purchased
+```
+
+```{r}
+# Fitting logstic regression to the training set
+classifier = glm(formula = Purchased ~ .,
+                 family = 'binomial', 
+                 data = training_set_pca)
+```
+
+```{r}
+# Predicing the test set results
+prob_pred = predict(classifier, type = 'response', newdata = test_set_pca[-3])
+y_pred = ifelse(prob_pred > 0.5, 1, 0)
+y_pred
+```
+
+```{r}
+# Making the confusion matrix
+cm = table(test_set_pca[, 3], y_pred)
+cm
+```
+
+```{r}
+# Visualizing the training set results
+library(ElemStatLearn)
+set = training_set_pca
+X1 = seq(min(set[, 1]) - 1, max(set[, 1]) + 1, by = 0.01)
+X2 = seq(min(set[, 2]) - 1, max(set[, 2]) + 1, by = 0.01)
+grid_set = expand.grid(X1, X2)
+colnames(grid_set) = c('V1', 'V2')
+prob_pred = predict(classifier, newdata = grid_set)
+y_grid = ifelse(prob_pred > 0.5, 1, 0)
+plot(set[, -3], 
+     main = 'SVM (Training Set with Kernel PCA)', 
+     xlab = 'PC1', ylab = 'PC2', 
+     xlim = range(X1), ylim = range(X2))
+contour(X1, X2, matrix(as.numeric(y_grid), length(X1), length(X2)), add = TRUE)
+points(grid_set, pch = '.', col = ifelse(y_grid == 1, 'springgreen3', 'tomato'))
+points(set, pch = 21, bg = ifelse(set[, 3] == 1, 'green4', 'red3'))
+```
+
+```{r}
+# Visualizing the test set results
+library(ElemStatLearn)
+set = test_set_pca
+X1 = seq(min(set[, 1]) - 1, max(set[, 1]) + 1, by = 0.01)
+X2 = seq(min(set[, 2]) - 1, max(set[, 2]) + 1, by = 0.01)
+grid_set = expand.grid(X1, X2)
+colnames(grid_set) = c('V1', 'V2')
+prob_pred = predict(classifier, newdata = grid_set)
+y_grid = ifelse(prob_pred > 0.5, 1, 0)
+plot(set[, -3], 
+     main = 'SVM (Training Set with Kernel PCA)', 
+     xlab = 'PC1', ylab = 'PC2', 
+     xlim = range(X1), ylim = range(X2))
+contour(X1, X2, matrix(as.numeric(y_grid), length(X1), length(X2)), add = TRUE)
+points(grid_set, pch = '.', col = ifelse(y_grid == 1, 'springgreen3', 'tomato'))
+points(set, pch = 21, bg = ifelse(set[, 3] == 1, 'green4', 'red3'))
+```
